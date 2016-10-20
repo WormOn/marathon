@@ -80,8 +80,9 @@ sealed trait Task {
     taskId.mesosTaskId
   }
 
+  // TODO: remove this method (DCOS-10332)
   def mesosStatus: Option[MesosProtos.TaskStatus] = {
-    launched.flatMap(_.status.mesosStatus).orElse {
+    status.mesosStatus.orElse {
       launchedMesosId.map { mesosId =>
         val taskStatusBuilder = MesosProtos.TaskStatus.newBuilder
           .setState(TaskState.TASK_STAGING)
@@ -99,7 +100,7 @@ sealed trait Task {
   def effectiveIpAddress(runSpec: RunSpec): Option[String] =
     runSpec match {
       case app: AppDefinition if app.ipAddress.isDefined =>
-        launched.flatMap(_.ipAddresses).flatMap(_.headOption).map(_.getIpAddress)
+        status.ipAddresses.flatMap(_.headOption).map(_.getIpAddress)
 
       // TODO(PODS) extract ip address from launched task
       case _ =>
@@ -225,15 +226,8 @@ object Task {
     *
     * @param hostPorts sequence of ports in the Mesos Agent allocated to the task
     */
-  case class Launched(
-      status: Status,
-      hostPorts: Seq[Int]) {
-
-    def hasStartedRunning: Boolean = status.startedAt.isDefined
-
-    def ipAddresses: Option[Seq[MesosProtos.NetworkInfo.IPAddress]] =
-      status.mesosStatus.flatMap(MesosStatus.ipAddresses)
-  }
+  // TODO: hostPorts should ultimately move to Task.Status (DCOS-10332)
+  case class Launched(hostPorts: Seq[Int])
 
   /**
     * Contains information about the status of a launched task including timestamps for important
@@ -253,6 +247,8 @@ object Task {
       * @return the health status reported by mesos for this task
       */
     def healthy: Option[Boolean] = mesosStatus.withFilter(_.hasHealthy).map(_.getHealthy)
+
+    def ipAddresses: Option[Seq[MesosProtos.NetworkInfo.IPAddress]] = mesosStatus.flatMap(MesosStatus.ipAddresses)
   }
 
   object Status {
@@ -303,7 +299,8 @@ object Task {
 
     override def reservationWithVolumes: Option[Reservation] = None
 
-    override def launched: Option[Launched] = Some(Task.Launched(status, hostPorts))
+    // TODO: it doesn't really make sense to provide the hostPorts in this wrapper, does it? (DCOS-10332)
+    override def launched: Option[Launched] = Some(Task.Launched(hostPorts))
 
     private[this] def hasStartedRunning: Boolean = status.startedAt.isDefined
 
@@ -485,7 +482,7 @@ object Task {
 
     override def reservationWithVolumes: Option[Reservation] = Some(reservation)
 
-    override def launched: Option[Launched] = Some(Task.Launched(status, hostPorts))
+    override def launched: Option[Launched] = Some(Task.Launched(hostPorts))
 
     private[this] def hasStartedRunning: Boolean = status.startedAt.isDefined
 

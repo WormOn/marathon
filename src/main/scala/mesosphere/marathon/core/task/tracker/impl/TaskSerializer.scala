@@ -55,13 +55,9 @@ object TaskSerializer {
     def hostPorts = proto.getPortsList.map(_.intValue())(collection.breakOut)
 
     def launchedTask: Option[Task.Launched] = {
+      // TODO: this has super low cohesion (DCOS-10332)
       if (proto.hasStagedAt) {
-        Some(
-          Task.Launched(
-            status = taskStatus,
-            hostPorts = hostPorts
-          )
-        )
+        Some(Task.Launched(hostPorts))
       } else {
         None
       }
@@ -96,14 +92,14 @@ object TaskSerializer {
 
       case (Some(reservation), Some(launched)) =>
         Task.LaunchedOnReservation(
-          taskId, agentInfo, runSpecVersion, launched.status, launched.hostPorts, reservation)
+          taskId, agentInfo, runSpecVersion, taskStatus, launched.hostPorts, reservation)
 
       case (Some(reservation), None) =>
         Task.Reserved(taskId, agentInfo, reservation, taskStatus, runSpecVersion)
 
       case (None, Some(launched)) =>
         Task.LaunchedEphemeral(
-          taskId, agentInfo, runSpecVersion, launched.status, launched.hostPorts)
+          taskId, agentInfo, runSpecVersion, taskStatus, launched.hostPorts)
 
       case (None, None) =>
         val msg = s"Unable to deserialize task $taskId, agentInfo=$agentInfo. It is neither reserved nor launched"
